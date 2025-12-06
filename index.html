@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>从夯到拉排行榜</title>
+    <script src="https://cdn.staticfile.net/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SimHei', 'Heiti', 'Microsoft YaHei', sans-serif;
+            background: #1a1a1a;
+            color: white;
+            min-height: 100vh;
+            padding: 40px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: transparent;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .top-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-start;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 0;
+        }
+
+        .control-btn {
+            background: #444;
+            border: 1px solid #666;
+            color: white;
+            font-family: 'SimHei', sans-serif;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .control-btn:hover { background: #555; border-color: #7dbece; color: #7dbece; }
+        .control-btn.primary { background: #65a6bc; border-color: #65a6bc; }
+        .control-btn.primary:hover { background: #7dbece; color: white; }
+
+        .ranking-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 500px;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .tier {
+            display: flex;
+            align-items: stretch;
+            min-height: 140px;
+            margin-bottom: 5px;
+            background: #333;
+            border: 1px solid #404040;
+            transition: all 0.3s ease;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .tier:hover {
+            background-color: #3a3a3a;
+        }
+
+        .tier.drag-over {
+            background-color: #454545;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .tier-separator {
+            height: 12px;
+            background: transparent;
+            position: relative;
+            z-index: 50;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0 50px;
+            border-top: 1px dashed #444;
+            border-bottom: 1px dashed #444;
+            overflow: hidden;
+            margin: 2px 0;
+        }
+
+        .tier-separator:hover, .tier-separator.drag-over {
+            height: 155px;
+            background: #2a2a2a;
+            border-color: #65a6bc;
+            box-shadow: none; 
+            border-radius: 12px;
+        }
+        
+        .tier-separator.has-items {
+            height: auto;
+            min-height: 155px;
+            background: #252525;
+            border: 2px dashed #555;
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: none;
+        }
+
+        .tier-separator::after {
+            content: "拖拽至此处以骑墙 (夹在中间)";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-family: 'SimHei', sans-serif;
+        }
+
+        .tier-separator:hover::after, .tier-separator.drag-over::after { opacity: 1; }
+        .tier-separator.has-items::after { display: none; }
+
+        .tier-label {
+            width: 150px;
+            text-align: center;
+            font-size: 1.9em;
+            font-weight: 900;
+            color: white;
+            text-shadow: none; 
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 100;
+            flex-shrink: 0;
+            border-top-left-radius: 12px;
+            border-bottom-left-radius: 12px;
+            font-family: 'SimHei', sans-serif;
+        }
+        
+        .tier-name {
+            font-weight: 900 !important;
+            outline: none;
+            min-width: 20px;
+            z-index: 102;
+        }
+
+        .tier-name:focus {
+            background: rgba(0,0,0,0.5);
+            border-radius: 4px;
+            padding: 0 5px;
+        }
+
+        .color-picker {
+            position: absolute; right: -40px; top: 50%; transform: translateY(-50%);
+            width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 101;
+        }
+        .tier-label.editing .color-picker { opacity: 1; pointer-events: auto; }
+        .delete-tier-btn {
+            position: absolute; right: -75px; top: 50%; transform: translateY(-50%);
+            width: 32px; height: 32px; background: #fff; border: 2px solid #ff3742; border-radius: 50%;
+            color: #ff3742; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+            font-size: 26px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 101;
+        }
+        .tier-label.editing .delete-tier-btn { opacity: 1; pointer-events: auto; }
+
+        .tier-content {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px;
+            align-items: flex-start;
+        }
+
+        .image-item {
+            width: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: grab;
+            transition: transform 0.2s ease;
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        .image-item:hover {
+            transform: scale(1.05);
+            z-index: 1000;
+        }
+
+        .image-wrapper {
+            width: 120px;
+            height: 120px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: #000;
+            border-radius: 4px;
+        }
+
+        .image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+        }
+
+        .image-caption {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            text-align: center;
+            font-family: 'SimHei', sans-serif;
+            font-weight: bold;
+            border: none;
+            outline: none;
+            margin-top: 4px;
+            padding: 2px 4px;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            font-size: 14px;
+            border-radius: 4px;
+            transition: font-size 0.1s;
+        }
+        
+        .image-caption:focus {
+            background: #fff;
+            box-shadow: 0 0 5px #65a6bc;
+        }
+
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            padding: 20px;
+            justify-content: center;
+            background: #2d2d2d;
+            min-height: 200px;
+            border-radius: 0 0 8px 8px;
+            border-top: 2px solid #444;
+        }
+        
+        .image-gallery.drag-over {
+            background: #353535;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .upload-btn, .delete-zone {
+            width: 120px; height: 120px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3em; cursor: pointer; transition: all 0.3s ease;
+            border-radius: 8px;
+            font-family: 'SimHei', sans-serif;
+        }
+        .upload-btn { border: 2px dashed #666; background: #404040; color: #ccc; }
+        .upload-btn:hover { border-color: #007bff; background: #4a4a4a; color: #007bff; }
+        .delete-zone { border: 2px dashed #dc3545; background: #4a3a3a; color: #dc3545; }
+        .delete-zone.drag-over { background: #dc3545; color: white; }
+
+        .drag-preview {
+            position: fixed; pointer-events: none; z-index: 9999;
+            width: 120px; opacity: 0.8; transform: rotate(5deg);
+        }
+        .drag-preview img { width: 100%; height: auto; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: none;
+            justify-content: center; align-items: center; z-index: 2000;
+        }
+        .modal-content {
+            background: #2d2d2d; padding: 30px; border-radius: 10px;
+            max-width: 500px; width: 90%; color: white; position: relative;
+            font-family: 'SimHei', sans-serif;
+        }
+        .modal-title { color: #7dbece; margin-bottom: 20px; font-size: 1.5em; text-align: center; }
+        .close-modal { position: absolute; top: 10px; right: 15px; background: none; border: none; color: #999; font-size: 24px; cursor: pointer; }
+        
+        .template-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        .template-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #444;
+            background: #333;
+            cursor: pointer;
+        }
+        .template-item:hover { background: #3d3d3d; }
+        .template-item.active { background: #3d4a50; border-left: 4px solid #7dbece; }
+        .template-actions { display: flex; gap: 5px; }
+        .mini-btn { padding: 4px 8px; font-size: 12px; background: #555; border: none; color: white; border-radius: 3px; cursor: pointer; font-family: 'SimHei', sans-serif; }
+        .mini-btn:hover { background: #666; }
+        .mini-btn.del:hover { background: #dc3545; }
+
+        .image-modal { display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; cursor: zoom-out;}
+        .image-modal img { max-width: 90%; max-height: 90%; object-fit: contain; }
+
+        .page-footer-instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #222;
+            border-radius: 8px;
+            color: #ccc;
+            border: 1px solid #444;
+            width: 100%;
+            font-family: 'SimHei', sans-serif;
+        }
+        
+        .page-footer-instructions h3 {
+            color: #7dbece;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .page-footer-instructions ul {
+            padding-left: 20px;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .page-footer-instructions li {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="top-controls">
+            <button class="control-btn primary" onclick="openTemplateManager()">📂 模板管理</button>
+            <button class="control-btn" onclick="saveAsImage()">💾 保存图片</button>
+            <label class="control-btn">
+                <input type="checkbox" id="show-captions" onchange="toggleCaptions()" checked>
+                <span style="margin-left:5px">显示文字</span>
+            </label>
+        </div>
+
+        <div class="ranking-container" id="ranking-container">
+        </div>
+
+        <div class="image-gallery" id="image-gallery">
+            <div class="upload-btn" onclick="document.getElementById('file-input').click()" title="添加图片">+</div>
+            <div class="delete-zone" id="delete-zone" title="删除图片">-</div>
+        </div>
+        
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 10px;">
+            <button class="control-btn" onclick="addNewTier()">+ 添加评级</button>
+            <button class="control-btn" style="border-color: #dc3545; color: #dc3545;" onclick="resetRanking()">↻ 重置排行</button>
+        </div>
+        
+        <div class="page-footer-instructions">
+            <h3>📝 使用说明</h3>
+            <ul>
+                <li><strong>骑墙排名</strong>：将图片拖动到两个评级之间的虚线处，可以创建"中间层"。</li>
+                <li><strong>图片文字</strong>：点击图片下方的文字可直接编辑。文字会自动根据长度调整大小（黑体中文）。</li>
+                <li><strong>拖回图库</strong>：已排名的图片可以直接拖回下方的图片区域取消排名。</li>
+                <li><strong>模板管理</strong>：点击左上角可创建多个不同的排行榜存档。</li>
+                <li><strong>图片上传</strong>：支持JPG和PNG格式，拖拽或点击"+"上传。</li>
+            </ul>
+        </div>
+        
+        <input type="file" id="file-input" accept="image/jpeg,image/png" multiple style="display: none;">
+    </div>
+
+    <div class="modal" id="template-modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('template-modal')">×</button>
+            <h2 class="modal-title">📂 模板管理</h2>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+                <input type="text" id="new-template-name" placeholder="输入新模板名称..." style="flex:1; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #444; color: white; font-family: 'SimHei', sans-serif;">
+                <button class="control-btn primary" onclick="createNewTemplate()">新建</button>
+            </div>
+            <div class="template-list" id="template-list-container">
+            </div>
+        </div>
+    </div>
+
+    <div class="image-modal" id="image-modal" onclick="this.style.display='none'">
+        <img src="" id="full-image">
+    </div>
+
+    <script>
+        let draggedElement = null;
+        let imageCounter = 0;
+        let currentTemplateId = 'default';
+        let db = null;
+        let isDragging = false;
+        let dragPreview = null;
+        let startX, startY;
+        
+        const DEFAULT_TIERS = [
+            { name: '夯', color: '#e74d5a' },
+            { name: '顶级', color: '#ff9f43' },
+            { name: '人上人', color: '#5a61e7' },
+            { name: 'NPC', color: '#2ed573' },
+            { name: '拉完了', color: '#747d8c' }
+        ];
+
+        const DB_NAME = 'RankingProDB';
+        const STORE_NAME = 'templates';
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 2);
+                
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve(db);
+                };
+                request.onerror = (e) => reject(e);
+            });
+        }
+
+        async function saveCurrentState() {
+            if (!db) return;
+            
+            const state = {
+                id: currentTemplateId,
+                name: getCurrentTemplateName(),
+                lastModified: Date.now(),
+                settings: {
+                    showCaptions: document.getElementById('show-captions').checked
+                },
+                tiers: [],
+                gallery: []
+            };
+
+            const container = document.getElementById('ranking-container');
+            Array.from(container.children).forEach(child => {
+                if (child.classList.contains('tier')) {
+                    state.tiers.push({
+                        type: 'tier',
+                        name: child.querySelector('.tier-name').innerText,
+                        color: child.querySelector('.tier-label').style.backgroundColor,
+                        images: getImagesInContainer(child.querySelector('.tier-content'))
+                    });
+                } else if (child.classList.contains('tier-separator') && child.classList.contains('has-items')) {
+                    state.tiers.push({
+                        type: 'separator',
+                        images: getImagesInContainer(child)
+                    });
+                }
+            });
+
+            state.gallery = getImagesInContainer(document.getElementById('image-gallery'));
+
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            await tx.objectStore(STORE_NAME).put(state);
+        }
+
+        function getImagesInContainer(container) {
+            const images = [];
+            container.querySelectorAll('.image-item').forEach(item => {
+                if(item.classList.contains('upload-btn') || item.classList.contains('delete-zone')) return;
+                
+                images.push({
+                    src: item.querySelector('img').src,
+                    caption: item.querySelector('.image-caption').innerText
+                });
+            });
+            return images;
+        }
+
+        async function loadTemplate(templateId) {
+            if (!db) await initDB();
+            
+            const tx = db.transaction([STORE_NAME], 'readonly');
+            const request = tx.objectStore(STORE_NAME).get(templateId);
+            
+            request.onsuccess = () => {
+                const data = request.result;
+                currentTemplateId = templateId;
+                if (data) {
+                    renderRanking(data);
+                } else {
+                    resetRanking(true);
+                }
+                updateTemplateListUI();
+            };
+        }
+
+        function renderRanking(data) {
+            const container = document.getElementById('ranking-container');
+            container.innerHTML = '';
+            
+            if (data.settings) {
+                document.getElementById('show-captions').checked = data.settings.showCaptions;
+                toggleCaptions();
+            }
+
+            data.tiers.forEach((tierData, index) => {
+                if (tierData.type === 'tier') {
+                    const lastChild = container.lastElementChild;
+                    if (container.children.length > 0 && (!lastChild || !lastChild.classList.contains('tier-separator'))) {
+                        container.appendChild(createSeparator());
+                    }
+                    
+                    const tierEl = createTierElement(tierData.name, tierData.color);
+                    const contentEl = tierEl.querySelector('.tier-content');
+                    tierData.images.forEach(img => {
+                        contentEl.appendChild(createImageElement(img.src, img.caption));
+                    });
+                    container.appendChild(tierEl);
+                } else if (tierData.type === 'separator') {
+                    const sepEl = createSeparator();
+                    if (tierData.images && tierData.images.length > 0) {
+                        sepEl.classList.add('has-items');
+                        tierData.images.forEach(img => {
+                            sepEl.appendChild(createImageElement(img.src, img.caption));
+                        });
+                    }
+                    container.appendChild(sepEl);
+                }
+            });
+            
+            const gallery = document.getElementById('image-gallery');
+            const uploadBtn = gallery.querySelector('.upload-btn');
+            const deleteZone = gallery.querySelector('.delete-zone');
+            gallery.innerHTML = '';
+            
+            data.gallery.forEach(img => {
+                gallery.appendChild(createImageElement(img.src, img.caption));
+            });
+            
+            gallery.appendChild(uploadBtn);
+            gallery.appendChild(deleteZone);
+        }
+
+        function createTierElement(name, color) {
+            const tier = document.createElement('div');
+            tier.className = 'tier';
+            if(color.startsWith('rgb')) color = rgbToHex(color);
+            
+            tier.innerHTML = `
+                <div class="tier-label" style="background-color: ${color};">
+                    <input type="color" class="color-picker" value="${color}" onchange="updateTierColor(this)">
+                    <button class="delete-tier-btn" onclick="deleteTier(this)">×</button>
+                    <span class="tier-name" contenteditable="true" oninput="saveCurrentState()">${name}</span>
+                </div>
+                <div class="tier-content"></div>
+            `;
+            const label = tier.querySelector('.tier-label');
+            label.addEventListener('click', (e) => {
+                if(e.target === label) label.classList.toggle('editing');
+            });
+            return tier;
+        }
+
+        function createSeparator() {
+            const sep = document.createElement('div');
+            sep.className = 'tier-separator';
+            return sep;
+        }
+
+        function createImageElement(src, captionText) {
+            imageCounter++;
+            const div = document.createElement('div');
+            div.className = 'image-item';
+            div.id = `img-${imageCounter}`;
+            
+            if (!captionText) {
+                if (!src.startsWith('data:')) {
+                    try {
+                        const url = new URL(src);
+                        const parts = url.pathname.split('/');
+                        captionText = decodeURIComponent(parts[parts.length-1]).split('.')[0];
+                    } catch(e) { captionText = '图片'; }
+                } else {
+                    captionText = '编辑文字';
+                }
+            }
+
+            div.innerHTML = `
+                <div class="image-wrapper">
+                    <img src="${src}" draggable="false">
+                </div>
+                <div class="image-caption" contenteditable="true" spellcheck="false">${captionText}</div>
+            `;
+            
+            const caption = div.querySelector('.image-caption');
+            const adaptFont = () => {
+                const len = caption.innerText.length;
+                let size = 14;
+                if (len > 5) size = 12;
+                if (len > 8) size = 10;
+                if (len > 12) size = 9;
+                caption.style.fontSize = size + 'px';
+                saveCurrentState();
+            };
+            
+            caption.addEventListener('input', adaptFont);
+            setTimeout(adaptFont, 0); 
+            
+            div.querySelector('.image-wrapper').addEventListener('mousedown', (e) => {
+                if(e.button === 0) {}
+            });
+            
+            div.querySelector('.image-wrapper').addEventListener('click', (e) => {
+                if (!isDragging) {
+                     document.getElementById('full-image').src = src;
+                     document.getElementById('image-modal').style.display = 'flex';
+                }
+            });
+
+            if(!document.getElementById('show-captions').checked) {
+                caption.style.display = 'none';
+            }
+
+            return div;
+        }
+
+        document.addEventListener('mousedown', e => {
+            const item = e.target.closest('.image-item');
+            if (item && !e.target.classList.contains('image-caption')) {
+                e.preventDefault();
+                startDrag(item, e.clientX, e.clientY);
+            }
+        });
+        
+        document.addEventListener('mousemove', e => {
+            if (draggedElement) moveDrag(e.clientX, e.clientY);
+        });
+        
+        document.addEventListener('mouseup', endDrag);
+
+        document.addEventListener('touchstart', e => {
+            const item = e.target.closest('.image-item');
+            if (item && !e.target.classList.contains('image-caption')) {
+                 if(e.touches.length === 1) {
+                    startDrag(item, e.touches[0].clientX, e.touches[0].clientY);
+                }
+            }
+        }, {passive: false});
+
+        document.addEventListener('touchmove', e => {
+            if (draggedElement) {
+                e.preventDefault();
+                moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, {passive: false});
+
+        document.addEventListener('touchend', endDrag);
+
+        function startDrag(el, x, y) {
+            startX = x; startY = y;
+            draggedElement = el;
+            isDragging = false;
+        }
+
+        function moveDrag(x, y) {
+            if (!draggedElement) return;
+            
+            const dx = Math.abs(x - startX);
+            const dy = Math.abs(y - startY);
+            
+            if (!isDragging && (dx > 5 || dy > 5)) {
+                isDragging = true;
+                createPreview(draggedElement);
+                draggedElement.style.opacity = '0.4';
+            }
+
+            if (isDragging && dragPreview) {
+                dragPreview.style.left = (x - 60) + 'px';
+                dragPreview.style.top = (y - 60) + 'px';
+                highlightDropZone(x, y);
+            }
+        }
+
+        function createPreview(el) {
+            if (dragPreview) dragPreview.remove();
+            dragPreview = el.cloneNode(true);
+            dragPreview.className = 'drag-preview';
+            dragPreview.querySelector('.image-caption').style.display = 'none';
+            document.body.appendChild(dragPreview);
+        }
+
+        function highlightDropZone(x, y) {
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            const elBelow = document.elementFromPoint(x, y);
+            if (!elBelow) return;
+
+            const tier = elBelow.closest('.tier');
+            const sep = elBelow.closest('.tier-separator');
+            const gallery = elBelow.closest('.image-gallery');
+            const del = elBelow.closest('.delete-zone');
+
+            if (del) del.classList.add('drag-over');
+            else if (sep) sep.classList.add('drag-over');
+            else if (tier) tier.classList.add('drag-over');
+            else if (gallery) gallery.classList.add('drag-over');
+        }
+
+        function endDrag(e) {
+            if (!draggedElement) return;
+
+            if (isDragging) {
+                const x = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+                const y = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+                
+                const elBelow = document.elementFromPoint(x, y);
+                const tier = elBelow?.closest('.tier');
+                const sep = elBelow?.closest('.tier-separator');
+                const gallery = elBelow?.closest('.image-gallery');
+                const del = elBelow?.closest('.delete-zone');
+                
+                if (del) {
+                    draggedElement.remove();
+                } else if (sep) {
+                    sep.appendChild(draggedElement);
+                    sep.classList.add('has-items');
+                } else if (tier) {
+                    tier.querySelector('.tier-content').appendChild(draggedElement);
+                } else if (gallery) {
+                    const uploadBtn = gallery.querySelector('.upload-btn');
+                    gallery.insertBefore(draggedElement, uploadBtn);
+                }
+                
+                document.querySelectorAll('.tier-separator').forEach(s => {
+                    if (s.querySelectorAll('.image-item').length === 0) {
+                        s.classList.remove('has-items');
+                    }
+                });
+
+                draggedElement.style.opacity = '1';
+                saveCurrentState();
+            }
+
+            if (dragPreview) dragPreview.remove();
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            
+            draggedElement = null;
+            dragPreview = null;
+            isDragging = false;
+        }
+
+        function toggleCaptions() {
+            const show = document.getElementById('show-captions').checked;
+            document.querySelectorAll('.image-caption').forEach(el => {
+                el.style.display = show ? 'flex' : 'none';
+            });
+            saveCurrentState();
+        }
+
+        function addNewTier() {
+            const container = document.getElementById('ranking-container');
+            if (container.children.length > 0 && !container.lastElementChild.classList.contains('tier-separator')) {
+                container.appendChild(createSeparator());
+            }
+            const color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+            const tier = createTierElement('新评级', color);
+            container.appendChild(tier);
+            container.appendChild(createSeparator());
+            saveCurrentState();
+        }
+        
+        function deleteTier(btn) {
+            const tier = btn.closest('.tier');
+            const content = tier.querySelector('.tier-content');
+            const gallery = document.getElementById('image-gallery');
+            const uploadBtn = gallery.querySelector('.upload-btn');
+            while(content.children.length > 0) {
+                gallery.insertBefore(content.children[0], uploadBtn);
+            }
+            if(tier.nextElementSibling && tier.nextElementSibling.classList.contains('tier-separator')) {
+                tier.nextElementSibling.remove();
+            }
+            tier.remove();
+            saveCurrentState();
+        }
+
+        function updateTierColor(input) {
+            const label = input.closest('.tier-label');
+            label.style.backgroundColor = input.value;
+            saveCurrentState();
+        }
+
+        function resetRanking(forceDefault = false) {
+            const container = document.getElementById('ranking-container');
+            const gallery = document.getElementById('image-gallery');
+            const uploadBtn = gallery.querySelector('.upload-btn');
+
+            const allImages = [];
+            document.querySelectorAll('.tier .image-item').forEach(img => allImages.push(img));
+            document.querySelectorAll('.tier-separator .image-item').forEach(img => allImages.push(img));
+            
+            allImages.forEach(img => gallery.insertBefore(img, uploadBtn));
+
+            container.innerHTML = '';
+            
+            DEFAULT_TIERS.forEach((t, i) => {
+                if (i > 0) container.appendChild(createSeparator());
+                container.appendChild(createTierElement(t.name, t.color));
+            });
+            container.appendChild(createSeparator());
+            
+            saveCurrentState();
+        }
+
+        function openTemplateManager() {
+            document.getElementById('template-modal').style.display = 'flex';
+            updateTemplateListUI();
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function createNewTemplate() {
+            const nameInput = document.getElementById('new-template-name');
+            const name = nameInput.value.trim() || '未命名模板';
+            const id = 'tpl_' + Date.now();
+            
+            const newData = {
+                id: id,
+                name: name,
+                lastModified: Date.now(),
+                settings: { showCaptions: true },
+                tiers: DEFAULT_TIERS.map(t => ({ type: 'tier', name: t.name, color: t.color, images: [] })),
+                gallery: []
+            };
+            
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            tx.objectStore(STORE_NAME).add(newData);
+            
+            tx.oncomplete = () => {
+                nameInput.value = '';
+                loadTemplate(id);
+                closeModal('template-modal');
+            };
+        }
+
+        function getCurrentTemplateName() {
+            const item = document.querySelector(`.template-item[data-id="${currentTemplateId}"] .tpl-name`);
+            return item ? item.innerText : (currentTemplateId === 'default' ? '默认模板' : '我的模板');
+        }
+
+        async function updateTemplateListUI() {
+            if(!db) await initDB();
+            const listEl = document.getElementById('template-list-container');
+            listEl.innerHTML = '';
+            
+            const tx = db.transaction([STORE_NAME], 'readonly');
+            const req = tx.objectStore(STORE_NAME).getAll();
+            
+            req.onsuccess = () => {
+                const templates = req.result;
+                if(templates.length === 0) {
+                    const defTpl = {id: 'default', name: '默认模板', tiers: [], gallery: []}; 
+                    templates.push(defTpl);
+                }
+
+                templates.forEach(tpl => {
+                    const div = document.createElement('div');
+                    div.className = `template-item ${tpl.id === currentTemplateId ? 'active' : ''}`;
+                    div.dataset.id = tpl.id;
+                    div.onclick = (e) => {
+                        if(!e.target.classList.contains('mini-btn')) loadTemplate(tpl.id);
+                    };
+                    
+                    div.innerHTML = `
+                        <span class="tpl-name">${tpl.name}</span>
+                        <div class="template-actions">
+                            ${tpl.id !== 'default' ? `<button class="mini-btn del" onclick="deleteTemplate('${tpl.id}', event)">删除</button>` : ''}
+                        </div>
+                    `;
+                    listEl.appendChild(div);
+                });
+            };
+        }
+
+        function deleteTemplate(id, e) {
+            e.stopPropagation();
+            if(!confirm('删除此模板？')) return;
+            
+            const tx = db.transaction([STORE_NAME], 'readwrite');
+            tx.objectStore(STORE_NAME).delete(id);
+            
+            tx.oncomplete = () => {
+                if(id === currentTemplateId) {
+                    loadTemplate('default');
+                } else {
+                    updateTemplateListUI();
+                }
+            };
+        }
+
+        const fileInput = document.getElementById('file-input');
+        fileInput.addEventListener('change', handleFiles);
+        
+        function handleFiles(e) {
+            const files = Array.from(e.target.files);
+            processFiles(files);
+            e.target.value = '';
+        }
+
+        const uploadBtn = document.querySelector('.upload-btn');
+        uploadBtn.addEventListener('dragover', e => { e.preventDefault(); uploadBtn.style.borderColor = '#007bff'; });
+        uploadBtn.addEventListener('dragleave', e => { uploadBtn.style.borderColor = '#666'; });
+        uploadBtn.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadBtn.style.borderColor = '#666';
+            processFiles(e.dataTransfer.files);
+        });
+
+        async function processFiles(files) {
+            const gallery = document.getElementById('image-gallery');
+            const btn = gallery.querySelector('.upload-btn');
+            
+            for (const file of files) {
+                if (file.type === 'image/jpeg' || file.type === 'image/png') {
+                    const base64Data = await readFileAsDataURL(file);
+                    const name = file.name.replace(/\.[^/.]+$/, "");
+                    const el = createImageElement(base64Data, name);
+                    gallery.insertBefore(el, btn);
+                } else {
+                    console.log(`跳过不支持的文件: ${file.name} (仅支持JPG/PNG)`);
+                }
+            }
+            saveCurrentState();
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    resolve(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        function rgbToHex(rgb) {
+            if(!rgb) return '#333333';
+            let sep = rgb.indexOf(",") > -1 ? "," : " ";
+            rgb = rgb.substr(4).split(")")[0].split(sep);
+            let r = (+rgb[0]).toString(16), g = (+rgb[1]).toString(16), b = (+rgb[2]).toString(16);
+            if (r.length == 1) r = "0" + r;
+            if (g.length == 1) g = "0" + g;
+            if (b.length == 1) b = "0" + b;
+            return "#" + r + g + b;
+        }
+
+        function saveAsImage() {
+            html2canvas(document.querySelector('.ranking-container'), {
+                backgroundColor: '#1a1a1a',
+                scale: 2
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = '从夯到拉排行榜.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+
+        window.addEventListener('load', async () => {
+            await initDB();
+            loadTemplate('default');
+        });
+
+    </script>
+</body>
+</html>
