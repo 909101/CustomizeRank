@@ -1,2 +1,2 @@
-# CustomizeRank
-CustomizeRank
+# 从夯到拉排行榜
+用AI制作的一个排行榜工具。
